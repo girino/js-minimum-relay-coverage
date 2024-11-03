@@ -134,6 +134,9 @@ body {
 
                 // Determine the minimum relay set
                 const minRelaySet = computeMinimumRelaySet(relayContactMap, contacts);
+                // Sort the minimum relay set by the number of contacts they cover
+                minRelaySet.sort((a, b) => relayContactMap.get(b).size - relayContactMap.get(a).size);
+
 
                 // Display the results
                 output.className = '';
@@ -284,15 +287,24 @@ body {
             return relayContactMap;
         }
 
+        function getCoveredContacts(relayContactMap, relays) {
+            const coveredContacts = new Set();
+            relays.forEach((relay) => {
+                relayContactMap.get(relay).forEach((c) => coveredContacts.add(c));
+            });
+            return Array.from(coveredContacts);
+        }
+
         /**
          * Compute the minimum set of relays needed to cover all contacts using a greedy algorithm.
          * @param {Map<string, Set<string>>} relayContactMap - A map of relay URLs to the set of contacts they cover.
          * @param {string[]} contacts - List of contact pubkeys that need to be covered.
          * @returns {string[]} - Minimum relay set.
          */
-        function computeMinimumRelaySet(relayContactMap, contacts) {
+        function computeMinimumRelaySet(relayContactMapOrig, contacts) {
             const contactsToCover = new Set(contacts);
             const selectedRelays = [];
+            const relayContactMap = new Map(relayContactMapOrig);
 
             while (contactsToCover.size > 0) {
                 let bestRelay = null;
@@ -314,7 +326,7 @@ body {
 
                 selectedRelays.push(bestRelay);
                 relayContactMap.get(bestRelay).forEach((c) => contactsToCover.delete(c));
-                // relayContactMap.delete(bestRelay);
+                relayContactMap.delete(bestRelay);
             }
 
             return selectedRelays;
