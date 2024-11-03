@@ -1,0 +1,1 @@
+# js-minimum-relay-coverage
