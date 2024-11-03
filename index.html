@@ -40,14 +40,32 @@ body {
 </head>
 <body>
     <h1>Nostr Relay Finder</h1>
-    <p>Enter your Nostr public key (npub format):</p>
+    <p>Enter your Nostr public key in npub format (or <a href="#" id="getFromExtension">get from extension</a>)</p>
     <input type="text" id="pubkey" placeholder="npub1..." />
     <button id="findRelays">Find Relays</button>
     <div id="output"></div>
-
     <!-- Use a module script to import nostr-tools from Skypack -->
     <script type="module">
         import { relayInit, nip19 } from 'https://cdn.skypack.dev/nostr-tools@1.8.2';
+
+        document.getElementById('getFromExtension').addEventListener('click', async (event) => {
+            //event.preventDefault();
+            try {
+                const output = document.getElementById('output');
+                output.textContent = '';
+                output.className = '';
+                if (!window.nostr) {
+                    output.textContent = 'NIP-07 extension is not installed or not available.';
+                    output.className = 'error';
+                    return;
+                }
+                const pubkeyHex = await window.nostr.getPublicKey();
+                const npub = nip19.npubEncode(pubkeyHex);
+                document.getElementById('pubkey').value = npub;
+            } catch (error) {
+                console.error('Failed to get public key from extension:', error);
+            }
+        });
 
         document.getElementById('findRelays').addEventListener('click', async () => {
             const npub = document.getElementById('pubkey').value.trim();
