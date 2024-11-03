@@ -43,8 +43,22 @@ body {
     <p>Enter your Nostr public key in npub format (or <a href="#" id="getFromExtension">get from extension</a>)</p>
     <input type="text" id="pubkey" placeholder="npub1..." />
     <button id="findRelays">Find Relays</button>
-    <div id="output"></div>
     <!-- Use a module script to import nostr-tools from Skypack -->
+    <div style="display: flex; justify-content: space-between;">
+        <div style="flex: 4;">
+            <h2>Minimum relay Set</h2>
+            <textarea id="output" rows="10" style="width: 100%;" readonly></textarea>
+        </div>
+        <div style="flex: 1; margin-left: 20px;">
+            <h2>Relay Coverage</h2>
+            <textarea id="coverage" rows="10" style="width: 100%;" readonly></textarea>
+        </div>
+        <div style="flex: 4; margin-left: 20px;">
+            <h2>Ignore List</h2>
+            <textarea id="ignoreList" rows="10" style="width: 100%;" placeholder="Enter relays to ignore, one per line..."></textarea>
+        </div>
+    </div>
+
     <script type="module">
         import { relayInit, nip19 } from 'https://cdn.skypack.dev/nostr-tools@1.8.2';
 
@@ -52,6 +66,9 @@ body {
             //event.preventDefault();
             try {
                 const output = document.getElementById('output');
+                const coverage = document.getElementById('coverage');
+                coverage.textContent = '';
+                coverage.className = '';
                 output.textContent = '';
                 output.className = '';
                 if (!window.nostr) {
@@ -70,8 +87,17 @@ body {
         document.getElementById('findRelays').addEventListener('click', async () => {
             const npub = document.getElementById('pubkey').value.trim();
             const output = document.getElementById('output');
+            const coverage = document.getElementById('coverage');
             output.textContent = 'Processing...';
             output.className = 'loading';
+            coverage.textContent = '';
+            coverage.className = '';
+            // Read ignore list from the textarea
+            const ignoreList = document.getElementById('ignoreList').value
+                .split('\n')
+                .filter(url => url.startsWith('wss://') || url.startsWith('ws://'))
+                .map(url => normalizeRelayURL(url.trim()));
+            console.log('Ignore list:', ignoreList);
 
             try {
                 // Decode npub to hex pubkey
@@ -98,7 +124,7 @@ body {
                 }
 
                 // Fetch relays for contacts (kind 10002 events)
-                const relayContactMap = await fetchRelaysForContacts(contacts, relays);
+                const relayContactMap = await fetchRelaysForContacts(contacts, relays, ignoreList);
                 
                 if (relayContactMap.size === 0) {
                     output.textContent = 'No relays found for contacts.';
@@ -114,15 +140,16 @@ body {
                 if (minRelaySet.length === 0) {
                     output.textContent = 'No relays needed to cover all contacts.';
                 } else {
-                    let tableHTML = 'Minimum relay set:<br><br>';
-                    tableHTML += '<table border="1"><thead><tr><th>Relay</th><th>Coverage</th></tr></thead><tbody>';
+                    let tableHTML = '';
+                    let coverageHTML = '';
                     minRelaySet.forEach((relay) => {
                         const coveredContacts = relayContactMap.get(relay).size;
-                        tableHTML += `<tr><td>${relay}</td><td style="text-align: right;">${coveredContacts}</td></tr>`;
+                        tableHTML += `${relay}`;
+                        coverageHTML += ` (${coveredContacts} contacts)\n`;
+                        tableHTML += '\n';
                     });
-                    tableHTML += '</tbody></table>';
                     output.innerHTML = tableHTML;
-
+                    coverage.innerHTML = coverageHTML;
                 }
             } catch (error) {
                 output.textContent = `Error: ${error.message}`;
@@ -196,7 +223,7 @@ body {
          * @param {string[]} relays - List of relay URLs.
          * @returns {Promise<Map<string, Set<string>>>} - Map of relay URLs to sets of contact pubkeys they cover.
          */
-        async function fetchRelaysForContacts(contacts, relays) {
+        async function fetchRelaysForContacts(contacts, relays, ignoreList) {
             const relayContactMap = new Map();
 
             for (const relayUrl of relays) {
@@ -222,6 +249,9 @@ body {
                             event.tags.forEach((tag) => {
                                 if (tag[0] === 'r' && tag[1]) {
                                     const normalizedRelay = normalizeRelayURL(tag[1]);
+                                    if (ignoreList.includes(normalizedRelay)) {
+                                        return;
+                                    }
                                     if (!relayContactMap.has(normalizedRelay)) {
                                         relayContactMap.set(normalizedRelay, new Set());
                                     }
@@ -251,8 +281,7 @@ body {
                     console.error(`Failed to fetch relays from ${relayUrl}:`, err);
                 }
             }
-
-                        return relayContactMap;
+            return relayContactMap;
         }
 
         /**
